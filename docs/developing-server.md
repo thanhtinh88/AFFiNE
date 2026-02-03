@@ -5,6 +5,10 @@ This document explains how to start server (@affine/server) locally with Docker
 > This document is not guaranteed to be up-to-date.
 > If you find any outdated information, please feel free to open an issue or submit a PR.
 
+## Run this command to fix memmory limit
+
+export NODE_OPTIONS="--max-old-space-size=8192"
+
 ## Run required dev services in docker compose
 
 Running yarn's server package (@affine/server) requires some dev services to be running, i.e.:
