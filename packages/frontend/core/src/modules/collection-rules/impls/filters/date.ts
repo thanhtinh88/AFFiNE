@@ -2,6 +2,9 @@ import type { DocsService } from '@affine/core/modules/doc';
 import type { WorkspacePropertyFilter } from '@affine/core/modules/workspace-property';
 import { Service } from '@toeverything/infra';
 import dayjs, { type Dayjs, isDayjs } from 'dayjs';
+import quarterOfYear from 'dayjs/plugin/quarterOfYear'; // ← THÊM DÒNG NÀY
+
+dayjs.extend(quarterOfYear); // ← EXTEND PLUGIN
 import { map, type Observable } from 'rxjs';
 
 import type { FilterProvider } from '../../provider';
@@ -28,8 +31,6 @@ export function basicDateFilter(
   upstream$: Observable<Map<string, string | number | undefined>>
 ) => Observable<Set<string>> {
   return upstream$ => {
-    // value can be like "2025-01-01,2025-01-02"
-    // or "2025-01-01"
     const filterValues = (params.value
       ?.split(',')
       .map(t => parseDate(t))
@@ -37,18 +38,6 @@ export function basicDateFilter(
 
     const now = dayjs();
     const method = params.method as WorkspacePropertyFilter<'date'>;
-
-    const relativeRanges: Record<string, Dayjs> = {
-      'last-3-days': now.subtract(3, 'day'),
-      'last-7-days': now.subtract(7, 'day'),
-      'last-15-days': now.subtract(15, 'day'),
-      'last-30-days': now.subtract(30, 'day'),
-      'this-week': now.startOf('week'),
-      'this-month': now.startOf('month'),
-      // @ts-expect-error 'quarter' is not in type, but it's supported by dayjs
-      'this-quarter': now.startOf('quarter'),
-      'this-year': now.startOf('year'),
-    };
 
     return upstream$.pipe(
       map(o => {
@@ -66,8 +55,8 @@ export function basicDateFilter(
           return handleDateRangeFilter(
             o,
             parsed =>
-              isAfter(parsed, filterValues[0]) &&
-              isBefore(parsed, filterValues[1])
+              isAfterOrEqual(parsed, filterValues[0]) &&
+              isBeforeOrEqual(parsed, filterValues[1])
           );
         }
 
@@ -83,9 +72,113 @@ export function basicDateFilter(
           );
         }
 
-        if (method in relativeRanges) {
-          return handleDateRangeFilter(o, parsed =>
-            isAfter(parsed, relativeRanges[method])
+        // FIX: Xử lý relative ranges với upper & lower bounds
+        if (method === 'last-3-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.subtract(3, 'day')) &&
+              isBeforeOrEqual(parsed, now)
+          );
+        }
+
+        if (method === 'last-7-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.subtract(7, 'day')) &&
+              isBeforeOrEqual(parsed, now)
+          );
+        }
+
+        if (method === 'last-15-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.subtract(15, 'day')) &&
+              isBeforeOrEqual(parsed, now)
+          );
+        }
+
+        if (method === 'last-30-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.subtract(30, 'day')) &&
+              isBeforeOrEqual(parsed, now)
+          );
+        }
+
+        // Thêm mới filters
+        if (method === 'next-3-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now) &&
+              isBeforeOrEqual(parsed, now.add(3, 'day'))
+          );
+        }
+
+        if (method === 'next-7-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now) &&
+              isBeforeOrEqual(parsed, now.add(7, 'day'))
+          );
+        }
+
+        if (method === 'next-15-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now) &&
+              isBeforeOrEqual(parsed, now.add(15, 'day'))
+          );
+        }
+
+        if (method === 'next-30-days') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now) &&
+              isBeforeOrEqual(parsed, now.add(30, 'day'))
+          );
+        }
+
+        if (method === 'this-week') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.startOf('week')) &&
+              isBeforeOrEqual(parsed, now.endOf('week'))
+          );
+        }
+
+        if (method === 'this-month') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.startOf('month')) &&
+              isBeforeOrEqual(parsed, now.endOf('month'))
+          );
+        }
+
+        if (method === 'this-quarter') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.startOf('quarter')) &&
+              isBeforeOrEqual(parsed, now.endOf('quarter'))
+          );
+        }
+
+        if (method === 'this-year') {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfterOrEqual(parsed, now.startOf('year')) &&
+              isBeforeOrEqual(parsed, now.endOf('year'))
           );
         }
 
@@ -127,7 +220,27 @@ function handleDateRangeFilter(
   return match;
 }
 
+// FIX: Tách riêng isAfter (strictly after, dùng cho 'after' method)
 function isAfter(
+  targetDate: readonly [number, number, number] | Dayjs,
+  referenceDate: readonly [number, number, number] | Dayjs
+): boolean {
+  const [targetYear, targetMonth, targetDay] = isDayjs(targetDate)
+    ? [targetDate.year(), targetDate.month() + 1, targetDate.date()]
+    : targetDate;
+  const [refYear, refMonth, refDay] = isDayjs(referenceDate)
+    ? [referenceDate.year(), referenceDate.month() + 1, referenceDate.date()]
+    : referenceDate;
+
+  return (
+    targetYear > refYear ||
+    (targetYear === refYear && targetMonth > refMonth) ||
+    (targetYear === refYear && targetMonth === refMonth && targetDay > refDay) // FIX: Đổi >= thành >
+  );
+}
+
+// NEW: Thêm isAfterOrEqual (dùng cho ranges)
+function isAfterOrEqual(
   targetDate: readonly [number, number, number] | Dayjs,
   referenceDate: readonly [number, number, number] | Dayjs
 ): boolean {
@@ -145,12 +258,36 @@ function isAfter(
   );
 }
 
+// FIX: isBefore đổi thành strictly before
 function isBefore(
-  targetDate: [number, number, number],
-  referenceDate: [number, number, number]
+  targetDate: readonly [number, number, number] | Dayjs,
+  referenceDate: readonly [number, number, number] | Dayjs
 ): boolean {
-  const [targetYear, targetMonth, targetDay] = targetDate;
-  const [refYear, refMonth, refDay] = referenceDate;
+  const [targetYear, targetMonth, targetDay] = isDayjs(targetDate)
+    ? [targetDate.year(), targetDate.month() + 1, targetDate.date()]
+    : targetDate;
+  const [refYear, refMonth, refDay] = isDayjs(referenceDate)
+    ? [referenceDate.year(), referenceDate.month() + 1, referenceDate.date()]
+    : referenceDate;
+
+  return (
+    targetYear < refYear ||
+    (targetYear === refYear && targetMonth < refMonth) ||
+    (targetYear === refYear && targetMonth === refMonth && targetDay < refDay) // FIX: Đổi <= thành <
+  );
+}
+
+// NEW: Thêm isBeforeOrEqual
+function isBeforeOrEqual(
+  targetDate: readonly [number, number, number] | Dayjs,
+  referenceDate: readonly [number, number, number] | Dayjs
+): boolean {
+  const [targetYear, targetMonth, targetDay] = isDayjs(targetDate)
+    ? [targetDate.year(), targetDate.month() + 1, targetDate.date()]
+    : targetDate;
+  const [refYear, refMonth, refDay] = isDayjs(referenceDate)
+    ? [referenceDate.year(), referenceDate.month() + 1, referenceDate.date()]
+    : referenceDate;
 
   return (
     targetYear < refYear ||
