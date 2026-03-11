@@ -18,6 +18,7 @@ import { backoffRetry, exhaustMapWithTrailing } from './utils';
 
 export class IndexedDBIndexerStorage extends IndexerStorageBase {
   static readonly identifier = 'IndexedDBIndexerStorage';
+  override recommendRefreshInterval: number = 0; // force refresh on each indexer operation
   readonly connection = share(new IDBConnection(this.options));
   override isReadonly = false;
   private readonly data = new DataStruct();
@@ -216,5 +217,11 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
   emitTableUpdated(table: keyof IndexerSchema) {
     this.tableUpdate$.next(table);
     this.channel.postMessage({ type: 'indexer-updated', table });
+  }
+
+  // Get the current indexer version
+  // increase this number to re-index all docs
+  async indexVersion(): Promise<number> {
+    return Promise.resolve(1);
   }
 }

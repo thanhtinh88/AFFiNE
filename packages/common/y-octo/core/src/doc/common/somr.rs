@@ -94,7 +94,7 @@ impl<T> SomrInner<T> {
     self.data.as_ref().map(|x| unsafe { &*x.get() })
   }
 
-  fn data_mut(&self) -> Option<InnerRefMut<T>> {
+  fn data_mut(&self) -> Option<InnerRefMut<'_, T>> {
     self.data.as_ref().map(|x| InnerRefMut {
       inner: unsafe { NonNull::new_unchecked(x.get()) },
       _marker: PhantomData,
@@ -145,7 +145,7 @@ impl<T> Somr<T> {
   }
 
   #[allow(unused)]
-  pub unsafe fn get_mut_from_ref(&self) -> Option<InnerRefMut<T>> {
+  pub unsafe fn get_mut_from_ref(&self) -> Option<InnerRefMut<'_, T>> {
     if !self.is_owned() || self.dangling() {
       return None;
     }
@@ -289,8 +289,7 @@ impl<T> FlattenGet<T> for Option<Somr<T>> {
 
 impl<T: PartialEq> PartialEq for Somr<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.ptr() == other.ptr()
-      || !self.dangling() && !other.dangling() && self.inner() == other.inner()
+    self.ptr() == other.ptr() || !self.dangling() && !other.dangling() && self.inner() == other.inner()
   }
 }
 
@@ -385,10 +384,7 @@ mod tests {
       let five_ref = five.clone();
       assert!(!five_ref.is_owned());
       assert_eq!(five_ref.get(), Some(&5));
-      assert_eq!(
-        five_ref.ptr().as_ptr() as usize,
-        five.ptr().as_ptr() as usize
-      );
+      assert_eq!(five_ref.ptr().as_ptr() as usize, five.ptr().as_ptr() as usize);
 
       drop(five);
       // owner released

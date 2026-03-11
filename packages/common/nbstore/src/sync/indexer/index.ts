@@ -106,10 +106,6 @@ export interface IndexerSync {
 }
 
 export class IndexerSyncImpl implements IndexerSync {
-  /**
-   * increase this number to re-index all docs
-   */
-  readonly INDEXER_VERSION = 1;
   private abort: AbortController | null = null;
   private readonly rootDocId = this.doc.spaceId;
   private readonly status = new IndexerSyncStatus(this.rootDocId);
@@ -266,7 +262,8 @@ export class IndexerSyncImpl implements IndexerSync {
     this.status.errorMessage = null;
     this.status.statusUpdatedSubject$.next(true);
 
-    console.log('indexer sync start');
+    const indexVersion = await this.indexer.indexVersion();
+    console.log('indexer sync start, version: ', indexVersion);
 
     const unsubscribe = this.doc.subscribeDocUpdate(update => {
       if (!this.status.rootDocReady) {
@@ -402,7 +399,7 @@ export class IndexerSyncImpl implements IndexerSync {
             docIndexedClock &&
             docIndexedClock.timestamp.getTime() ===
               docClock.timestamp.getTime() &&
-            docIndexedClock.indexerVersion === this.INDEXER_VERSION
+            docIndexedClock.indexerVersion === indexVersion
           ) {
             // doc is already indexed, just skip
             continue;
@@ -468,7 +465,7 @@ export class IndexerSyncImpl implements IndexerSync {
           await this.indexerSync.setDocIndexedClock({
             docId,
             timestamp: docClock.timestamp,
-            indexerVersion: this.INDEXER_VERSION,
+            indexerVersion: indexVersion,
           });
           // #endregion
         }
@@ -484,9 +481,16 @@ export class IndexerSyncImpl implements IndexerSync {
     }
   }
 
+  // ensure the indexer is refreshed according to recommendRefreshInterval
+  // recommendRefreshInterval <= 0 means force refresh on each operation
+  // recommendRefreshInterval > 0 means refresh if the last refresh is older than recommendRefreshInterval
   private async refreshIfNeed(): Promise<void> {
-    if (this.lastRefreshed + 100 < Date.now()) {
-      console.log('[indexer] refreshing indexer');
+    const recommendRefreshInterval = this.indexer.recommendRefreshInterval ?? 0;
+    const needRefresh =
+      recommendRefreshInterval > 0 &&
+      this.lastRefreshed + recommendRefreshInterval < Date.now();
+    const forceRefresh = recommendRefreshInterval <= 0;
+    if (needRefresh || forceRefresh) {
       await this.indexer.refreshIfNeed();
       this.lastRefreshed = Date.now();
     }

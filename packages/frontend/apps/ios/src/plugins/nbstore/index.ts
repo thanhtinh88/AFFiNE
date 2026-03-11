@@ -6,6 +6,7 @@ import {
   type BlobRecord,
   type CrawlResult,
   type DocClock,
+  type DocIndexedClock,
   type DocRecord,
   type ListedBlobRecord,
   parseUniversalId,
@@ -342,5 +343,102 @@ export const NbStoreNativeDBApis: NativeDBApis = {
     docId: string
   ): Promise<CrawlResult> {
     return await NbStore.crawlDocData({ id, docId });
+  },
+  ftsAddDocument: async function (
+    id: string,
+    indexName: string,
+    docId: string,
+    text: string,
+    index: boolean
+  ): Promise<void> {
+    await NbStore.ftsAddDocument({
+      id,
+      indexName,
+      docId,
+      text,
+      index,
+    });
+  },
+  ftsDeleteDocument: async function (
+    id: string,
+    indexName: string,
+    docId: string
+  ): Promise<void> {
+    await NbStore.ftsDeleteDocument({
+      id,
+      indexName,
+      docId,
+    });
+  },
+  ftsSearch: async function (
+    id: string,
+    indexName: string,
+    query: string
+  ): Promise<{ id: string; score: number; terms: Array<string> }[]> {
+    const { results } = await NbStore.ftsSearch({
+      id,
+      indexName,
+      query,
+    });
+    return results ?? [];
+  },
+  ftsGetDocument: async function (
+    id: string,
+    indexName: string,
+    docId: string
+  ): Promise<string | null> {
+    const result = await NbStore.ftsGetDocument({
+      id,
+      indexName,
+      docId,
+    });
+    return result.text;
+  },
+  ftsGetMatches: async function (
+    id: string,
+    indexName: string,
+    docId: string,
+    query: string
+  ): Promise<{ start: number; end: number }[]> {
+    const { matches } = await NbStore.ftsGetMatches({
+      id,
+      indexName,
+      docId,
+      query,
+    });
+    return matches ?? [];
+  },
+  ftsFlushIndex: async function (id: string): Promise<void> {
+    await NbStore.ftsFlushIndex({
+      id,
+    });
+  },
+  ftsIndexVersion: function (): Promise<number> {
+    return NbStore.ftsIndexVersion().then(res => res.indexVersion);
+  },
+  getDocIndexedClock: function (
+    id: string,
+    docId: string
+  ): Promise<DocIndexedClock | null> {
+    return NbStore.getDocIndexedClock({ id, docId });
+  },
+  setDocIndexedClock: function (
+    id: string,
+    docId: string,
+    indexedClock: Date,
+    indexerVersion: number
+  ): Promise<void> {
+    return NbStore.setDocIndexedClock({
+      id,
+      docId,
+      indexedClock: indexedClock.getTime(),
+      indexerVersion,
+    });
+  },
+  clearDocIndexedClock: function (id: string, docId: string): Promise<void> {
+    return NbStore.clearDocIndexedClock({
+      id,
+      docId,
+    });
   },
 };

@@ -1,24 +1,29 @@
+use std::sync::Arc;
+
 use affine_schema::get_migrator;
+use memory_indexer::InMemoryIndex;
 use sqlx::{
+  Pool, Row,
   migrate::MigrateDatabase,
   sqlite::{Sqlite, SqliteConnectOptions, SqlitePoolOptions},
-  Pool, Row,
 };
+use tokio::sync::RwLock;
 
 use super::error::Result;
 
 pub struct SqliteDocStorage {
   pub pool: Pool<Sqlite>,
   path: String,
+  pub index: Arc<RwLock<InMemoryIndex>>,
 }
 
 impl SqliteDocStorage {
   pub fn new(path: String) -> Self {
-    let sqlite_options = SqliteConnectOptions::new()
-      .filename(&path)
-      .foreign_keys(false);
+    let sqlite_options = SqliteConnectOptions::new().filename(&path).foreign_keys(false);
 
     let mut pool_options = SqlitePoolOptions::new();
+
+    let index = Arc::new(RwLock::new(InMemoryIndex::default()));
 
     if path == ":memory:" {
       pool_options = pool_options
@@ -30,6 +35,7 @@ impl SqliteDocStorage {
       Self {
         pool: pool_options.connect_lazy_with(sqlite_options),
         path,
+        index,
       }
     } else {
       Self {
@@ -37,6 +43,7 @@ impl SqliteDocStorage {
           .max_connections(4)
           .connect_lazy_with(sqlite_options.journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)),
         path,
+        index,
       }
     }
   }
@@ -61,6 +68,7 @@ impl SqliteDocStorage {
     };
 
     self.migrate().await?;
+    self.init_index().await?;
 
     Ok(())
   }
@@ -84,9 +92,7 @@ impl SqliteDocStorage {
   /// Flush the WAL file to the database file.
   /// See https://www.sqlite.org/pragma.html#pragma_wal_checkpoint:~:text=PRAGMA%20schema.wal_checkpoint%3B
   pub async fn checkpoint(&self) -> Result<()> {
-    sqlx::query("PRAGMA wal_checkpoint(FULL);")
-      .execute(&self.pool)
-      .await?;
+    sqlx::query("PRAGMA wal_checkpoint(FULL);").execute(&self.pool).await?;
 
     Ok(())
   }
