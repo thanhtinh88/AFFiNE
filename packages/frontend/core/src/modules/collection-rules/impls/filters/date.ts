@@ -38,16 +38,28 @@ export function basicDateFilter(
     const now = dayjs();
     const method = params.method as WorkspacePropertyFilter<'date'>;
 
+    // rolling windows: [now - N days, now]
     const relativeRanges: Record<string, Dayjs> = {
       'last-3-days': now.subtract(3, 'day'),
       'last-7-days': now.subtract(7, 'day'),
       'last-15-days': now.subtract(15, 'day'),
       'last-30-days': now.subtract(30, 'day'),
-      'this-week': now.startOf('week'),
-      'this-month': now.startOf('month'),
+    };
+
+    // upcoming windows: [now, now + N days]
+    const upcomingRanges: Record<string, Dayjs> = {
+      'next-7-days': now.add(7, 'day'),
+      'next-15-days': now.add(15, 'day'),
+      'next-30-days': now.add(30, 'day'),
+    };
+
+    // fixed calendar periods: [startOf(period), endOf(period)]
+    const periodRanges: Record<string, [Dayjs, Dayjs]> = {
+      'this-week': [now.startOf('week'), now.endOf('week')],
+      'this-month': [now.startOf('month'), now.endOf('month')],
       // @ts-expect-error 'quarter' is not in type, but it's supported by dayjs
-      'this-quarter': now.startOf('quarter'),
-      'this-year': now.startOf('year'),
+      'this-quarter': [now.startOf('quarter'), now.endOf('quarter')],
+      'this-year': [now.startOf('year'), now.endOf('year')],
     };
 
     return upstream$.pipe(
@@ -85,7 +97,25 @@ export function basicDateFilter(
 
         if (method in relativeRanges) {
           return handleDateRangeFilter(o, parsed =>
-            isAfter(parsed, relativeRanges[method])
+            isAfter(parsed, relativeRanges[method]) && isBefore(parsed, now)
+          );
+        }
+
+        // fixed period: date must fall within [startOf, endOf]
+        if (method in periodRanges) {
+          const [start, end] = periodRanges[method];
+          return handleDateRangeFilter(
+            o,
+            parsed => isAfter(parsed, start) && isBefore(parsed, end)
+          );
+        }
+
+        // "next-N-days": date must be >= today AND <= today+N
+        if (method in upcomingRanges) {
+          return handleDateRangeFilter(
+            o,
+            parsed =>
+              isAfter(parsed, now) && isBefore(parsed, upcomingRanges[method])
           );
         }
 
@@ -146,11 +176,13 @@ function isAfter(
 }
 
 function isBefore(
-  targetDate: [number, number, number],
-  referenceDate: [number, number, number]
+  targetDate: readonly [number, number, number] | Dayjs,
+  referenceDate: readonly [number, number, number] | Dayjs
 ): boolean {
-  const [targetYear, targetMonth, targetDay] = targetDate;
-  const [refYear, refMonth, refDay] = referenceDate;
+  const [targetYear, targetMonth, targetDay] = isDayjs(targetDate) ? [targetDate.year(), targetDate.month() + 1, targetDate.date()] : targetDate;
+  const [refYear, refMonth, refDay] = isDayjs(referenceDate)
+    ? [referenceDate.year(), referenceDate.month() + 1, referenceDate.date()]
+    : referenceDate;
 
   return (
     targetYear < refYear ||

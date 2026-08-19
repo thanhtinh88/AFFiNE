@@ -2418,6 +2418,18 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.filter.last 30 days"](): string;
     /**
+      * `next 7 days`
+      */
+    ["com.affine.filter.next 7 days"](): string;
+    /**
+      * `next 15 days`
+      */
+    ["com.affine.filter.next 15 days"](): string;
+    /**
+      * `next 30 days`
+      */
+    ["com.affine.filter.next 30 days"](): string;
+    /**
       * `this week`
       */
     ["com.affine.filter.this week"](): string;
